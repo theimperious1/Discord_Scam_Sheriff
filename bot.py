@@ -17,12 +17,12 @@ import sys
 import time
 import traceback
 from blacklister import Blacklister
-from channel_watcher import ChannelMonitor
 from helpers import db_manager
 import aiosqlite
 import discord
 from discord.ext import commands, tasks
 from discord.ext.commands import Bot, Context
+from models.server_configuration import ServerConfiguration
 
 import exceptions
 
@@ -74,12 +74,12 @@ It is recommended to use slash commands and therefore not use prefix commands.
 If you want to use prefix commands, make sure to also enable the intent below in the Discord developer portal.
 """
 intents.message_content = True
+intents.members = True
 
 bot = Bot(command_prefix=commands.when_mentioned_or(
     config["prefix"]), intents=intents, help_command=None)
 
 blacklist = Blacklister(bot, db_manager)
-channel_monitor = ChannelMonitor(bot, blacklist)
 
 
 async def init_db():
@@ -121,6 +121,38 @@ async def on_ready() -> None:
         await bot.tree.sync()
 
 
+@bot.event
+async def on_guild_join(guild: discord.Guild) -> None:
+    """
+    The code in this event is executed every time the bot has joined a new server.
+    It initializes a configuration for that server and logs the event.
+    :param guild: The guild that the bot has joined
+    """
+    try:
+        await db_manager.init_config(guild.id, 0, 0)
+        now = time.time()
+        bot.server_configs[str(guild.id)] = ServerConfiguration(
+            guild.id, 0, 0, 'INITIAL_PHRASE', 'warn', 'warn', 'both', True, now, now)
+        print(f'{config["bot_name"]} has joined a new guild called {guild.name}!')
+
+    except:
+        traceback.print_exc()
+
+
+@bot.event
+async def on_member_update(before: discord.Member, after: discord.Member):
+    if not bot.server_configs[str(after.guild.id)].get_matching_enabled() != 1:
+        return
+    print('Member updated: Checking blacklist...')
+    now = time.time()
+    if (now - before.joined_at.timestamp()) <= (86400 * 7):  # 7 days
+        output_channel_id = int(bot.server_configs[str(after.guild.id)].get_output_channel_id())
+        output_channel = bot.get_channel(output_channel_id)
+        username_check_passed, avatar_check_passed = await blacklist.do_all(after, after.guild, output_channel)
+        if not username_check_passed or not avatar_check_passed:
+            print(f'Member failed blacklist check during member update on: {after.guild.name}')
+
+
 @tasks.loop(minutes=1.0)
 async def status_task() -> None:
     """
@@ -141,6 +173,9 @@ async def on_message(message: discord.Message) -> None:
     if message.author == bot.user or message.author.bot:
         return
 
+    if bot.server_configs[str(message.guild.id)].get_matching_enabled() != 1:
+        return
+
     monitor_channel_id = int(bot.server_configs[str(message.guild.id)].get_monitor_channel_id())
     trigger_phrase = bot.server_configs[str(message.guild.id)].get_welcome_trigger_phrase()
     if message.channel.id == monitor_channel_id and message.content.startswith(trigger_phrase):
@@ -149,8 +184,10 @@ async def on_message(message: discord.Message) -> None:
         output_channel_id = int(bot.server_configs[str(message.guild.id)].get_output_channel_id())
         output_channel = bot.get_channel(output_channel_id)
 
-        user = await bot.fetch_user(message.mentions[0].id)
-        await blacklist.do_all(user, message.guild, output_channel)
+        user = bot.get_guild(message.guild.id).get_member(message.author.id)
+        username_check_passed, avatar_check_passed = await blacklist.do_all(user, message.guild, output_channel)
+        if not username_check_passed or not avatar_check_passed:
+            print(f'User failed blacklist check on {message.guild.name}.')
     else:
         await bot.process_commands(message)
 
@@ -170,22 +207,6 @@ async def on_command_completion(context: Context) -> None:
     else:
         print(
             f"Executed {executed_command} command by {context.author} (ID: {context.author.id}) in DMs")
-
-
-@bot.event
-async def on_guild_join(guild: discord.Guild) -> None:
-    """
-    The code in this event is executed every time the bot has joined a new server.
-    It initializes a configuration for that server and logs the event.
-    :param guild: The guild that the bot has joined
-    """
-    try:
-        await db_manager.init_config(guild.id, 0, 0)
-        now = time.time()
-        bot.server_configs[str(guild.id)] = [guild.id, 0, 0, 'INITIAL_PHRASE', 'warn', 'warn', True, now, now]
-        print(f'{config["bot_name"]} has joined a new guild called {guild.name}!')
-    except:
-        traceback.print_exc()
 
 
 @bot.event
@@ -258,9 +279,6 @@ async def load_cogs() -> None:
             except Exception as e:
                 exception = f"{type(e).__name__}: {e}"
                 print(f"Failed to load extension {extension}\n{exception}")
-    loop = asyncio.get_event_loop()  # TODO: We stopped here
-    monitor_task = await loop.create_task(channel_monitor.monitor())
-    task_check_flagged = await loop.create_task(channel_monitor.check_flagged_users())
 
 
 asyncio.run(init_db())

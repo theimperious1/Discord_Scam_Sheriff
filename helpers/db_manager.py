@@ -115,7 +115,7 @@ async def get_config_options() -> dict:
             result = await cursor.fetchall()
             result_dict = {}
             for row in result:
-                result_dict[row[0]] = ServerConfiguration(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8])
+                result_dict[row[0]] = ServerConfiguration(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9])
             return result_dict
 
 
@@ -126,7 +126,7 @@ async def init_config(server_id: int, output_channel_id: int, monitor_channel_id
     async with aiosqlite.connect("database/database.db") as db:
         now = time.time()
         await db.execute(
-            "INSERT INTO server_configurations(server_id, output_channel_id, monitor_channel_id, welcome_trigger_phrase, action_mode_pfp, action_mode_username, matching_enabled, created_on, updated_on) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING",
-            (str(server_id), str(output_channel_id), str(monitor_channel_id), 'INITIAL_PHRASE', 'warn', 'warn', True, now, now))
+            "INSERT INTO server_configurations(server_id, output_channel_id, monitor_channel_id, welcome_trigger_phrase, action_mode_pfp, action_mode_username, name_blacklist_mode, matching_enabled, created_on, updated_on) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING",
+            (str(server_id), str(output_channel_id), str(monitor_channel_id), 'INITIAL_PHRASE', 'warn', 'warn', 'both', True, now, now))
         await db.commit()
         return True

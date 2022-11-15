@@ -1,3 +1,5 @@
+import traceback
+
 from models.data_classes import Match
 from typing import Union
 import discord
@@ -12,10 +14,10 @@ class Blacklister:
         self.bot = bot
         self.db_manager = db_manager
 
-    async def do_all(self, user: discord.User, guild: discord.Guild,
+    async def do_all(self, user: discord.Member, guild: discord.Guild,
                      output_channel: discord.TextChannel = None) -> tuple:
         username_check_passed = await self.check_username(user, guild)
-
+        print(username_check_passed)
         if not username_check_passed:
             await self.punish_blacklisted_username(user, guild, output_channel)
 
@@ -27,13 +29,20 @@ class Blacklister:
 
         return username_check_passed, avatar_check_passed
 
-    async def check_username(self, user: discord.User, guild: discord.Guild) -> bool:
+    async def check_username(self, user: discord.Member, guild: discord.Guild) -> bool:
         banned_usernames = await self.db_manager.get_blacklisted_usernames(guild.id)
-        if user.name in banned_usernames:
+        username_mode = self.bot.server_configs[str(guild.id)].get_name_blacklist_mode()
+        print(username_mode)
+        print(user.name)
+        print(user.nick)
+        if (username_mode == 'usernames' or username_mode == 'both') and user.name in banned_usernames:
+            return False
+
+        if (username_mode == 'nicknames' or username_mode == 'both') and user.nick in banned_usernames:
             return False
         return True
 
-    async def check_avatar(self, user: discord.User, guild: discord.Guild) -> Union[list, None]:
+    async def check_avatar(self, user: discord.Member, guild: discord.Guild) -> Union[list, None]:
         avatar_url = user.display_avatar.url
         if media := fetch_media(avatar_url):
             img_hash = diff_hash(media)
@@ -53,14 +62,14 @@ class Blacklister:
                 return matches
             return
 
-    async def punish_blacklisted_username(self, user: discord.User, guild: discord.Guild,
+    async def punish_blacklisted_username(self, user: discord.Member, guild: discord.Guild,
                                           output_channel: discord.TextChannel) -> None:
         auto_ban = self.bot.server_configs[str(guild.id)].get_action_mode_username() == 'autoban'
         await send_embed(discord, 'WARNING! This account matches a banned username!',
                          description=f'**ID**: {user.id}\n'
                                      f'**Name**: {user.name}\n'
-                                     f'**Display Name**: {user.display_name}\n'
-                                     f'Auto-banned: {"true" if auto_ban else "false"}',
+                                     f'**Nickname**: {user.nick}\n'
+                                     f'**Auto-banned**: {"true" if auto_ban else "false"}',
                          output_channel=output_channel)
 
         if auto_ban:
@@ -68,7 +77,7 @@ class Blacklister:
                             reason=f'Banned by {self.bot.config["bot_name"]} for having a blacklisted username',
                             delete_message_seconds=3600)
 
-    async def punish_blacklisted_pfp(self, user: discord.User, guild: discord.Guild,
+    async def punish_blacklisted_pfp(self, user: Union[discord.User, discord.Member], guild: discord.Guild,
                                      output_channel: discord.TextChannel,
                                      matches: list) -> None:
         msg = 'This users profile picture matches to {0} banned users.'.format(len(matches))
@@ -76,9 +85,9 @@ class Blacklister:
         await send_embed(discord, msg,
                          description=f'**ID**: {user.id}\n'
                                      f'**Name**: {user.name}\n'
-                                     f'**Display Name**: {user.display_name}\n'
+                                     f'**Nickname**: {user.nick}\n'
                                      f'**Avatar URL**: {user.display_avatar}\n'
-                                     f'**Auto-banned: {"true" if auto_ban else "false"}',
+                                     f'**Auto-banned**: {"true" if auto_ban else "false"}',
                          output_channel=output_channel)
 
         if auto_ban:

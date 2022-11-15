@@ -1,13 +1,14 @@
 class ServerConfiguration:
 
     def __init__(self, server_id, output_channel_id, monitor_channel_id, welcome_trigger_phrase,
-                 action_mode_pfp, action_mode_username, matching_enabled, created_on, updated_on):
+                 action_mode_pfp, action_mode_username, name_blacklist_mode, matching_enabled, created_on, updated_on):
         self.server_id = server_id
         self.output_channel_id = output_channel_id
         self.monitor_channel_id = monitor_channel_id
         self.welcome_trigger_phrase = welcome_trigger_phrase
         self.action_mode_pfp = action_mode_pfp
         self.action_mode_username = action_mode_username
+        self.name_blacklist_mode = name_blacklist_mode
         self.matching_enabled = matching_enabled
         self.created_on = created_on
         self.updated_on = updated_on
@@ -29,6 +30,9 @@ class ServerConfiguration:
 
     def set_action_mode_username(self, action_mode_username):
         self.action_mode_username = action_mode_username
+
+    def set_name_blacklist_mode(self, name_blacklist_mode):
+        self.name_blacklist_mode = name_blacklist_mode
 
     def set_matching_enabled(self, matching_enabled):
         self.matching_enabled = matching_enabled
@@ -56,6 +60,9 @@ class ServerConfiguration:
 
     def get_action_mode_username(self):
         return self.action_mode_username
+
+    def get_name_blacklist_mode(self):
+        return self.name_blacklist_mode
 
     def get_matching_enabled(self):
         return self.matching_enabled
